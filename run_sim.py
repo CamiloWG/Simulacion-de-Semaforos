@@ -5,17 +5,14 @@ from semaforos.gui import GUI
 
 
 def main():
-    # parámetros moderados para observabilidad
     laneA = Lane(
         name="A", spawn_rate=0.06, max_speed=1.0, lane_length=400.0, min_gap_units=6.0
     )
     laneB = Lane(
         name="B", spawn_rate=0.06, max_speed=1.0, lane_length=400.0, min_gap_units=6.0
     )
-
-    # d/r/e más grandes para que las bandas sean visibles y la zona R sea amplia
     inter = Intersection(
-        lane_A=laneA, lane_B=laneB, d=150.0, n=6, u=6, m=1, r=50.0, e=30.0
+        lane_A=laneA, lane_B=laneB, d=150.0, n=6, u=20, m=1, r=50.0, e=30.0
     )
     inter.light_A.set_green()
     inter.light_B.set_red()

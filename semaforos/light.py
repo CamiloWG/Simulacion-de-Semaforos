@@ -1,3 +1,4 @@
+# semaforos/light.py
 from dataclasses import dataclass
 
 
@@ -6,7 +7,6 @@ class TrafficLight:
     name: str
     state: str = "red"
     green_time: int = 0
-    yellow_time_config: int = 2
 
     def set_green(self):
         self.state = "green"
