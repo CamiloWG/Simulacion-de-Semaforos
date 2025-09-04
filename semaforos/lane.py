@@ -31,26 +31,31 @@ class Lane:
         approach = [v for v in self.vehicles if v.position >= 0]
         approach.sort(key=lambda v: v.position)
 
-        for i, v in enumerate(approach):
+        stop_threshold = stop_line + (stop_buffer if not light_green else 0.0)
+
+        # Iterate backward to ensure front vehicle's new position is known
+        for i in range(len(approach) - 1, -1, -1):
+            v = approach[i]
             current_pos = v.position
+            desired_pos = current_pos - v.speed
 
             # Start with the desired position based on speed
-            desired_pos = current_pos - v.speed
             new_pos = desired_pos
 
-            # Constraint 1: Stop behind the car in front
+            # Constraint 1: Stop at the traffic light if red
+            if not light_green:
+                if new_pos < stop_threshold:
+                    new_pos = stop_threshold
+
+            # Constraint 2: Stop behind the car in front
             if i > 0:
                 front = approach[i - 1]
                 front_pos_after_move = next_positions.get(front.id, front.position)
                 min_allowed_pos = front_pos_after_move + self.min_gap_units
+
+                # The vehicle cannot move past the minimum allowed position
                 if new_pos < min_allowed_pos:
                     new_pos = min_allowed_pos
-
-            # Constraint 2: Stop at the traffic light if red
-            if not light_green:
-                stop_threshold = stop_line + stop_buffer
-                if new_pos < stop_threshold:
-                    new_pos = stop_threshold
 
             # Check if the vehicle is stopped
             v.stopped = abs(new_pos - current_pos) < 0.01

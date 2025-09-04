@@ -1,4 +1,6 @@
+# semaforos/simulation.py
 from .intersection import Intersection
+import random
 
 
 class Simulation:
@@ -22,7 +24,8 @@ class Simulation:
             light_green=lb_green, stop_line=0.0, stop_buffer=self.intersection.r
         )
 
-        # 3) spawn new vehicles
+        # 3) spawn new vehicles randomly on both lanes
+        # The spawn method itself has a random chance
         vA = self.intersection.lane_A.spawn(self.next_vehicle_id)
         if vA:
             self.next_vehicle_id += 1
