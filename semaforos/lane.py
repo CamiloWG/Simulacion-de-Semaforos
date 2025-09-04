@@ -27,6 +27,7 @@ class Lane:
             next_positions[v.id] = v.position
 
         # 2) Approaching vehicles (position >= 0)
+        # Sort by position ASC (lowest position = closest to the stop line)
         approach = [v for v in self.vehicles if v.position >= 0]
         approach.sort(key=lambda v: v.position)
 

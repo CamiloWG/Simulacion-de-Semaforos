@@ -57,68 +57,86 @@ class Intersection:
 
         # 3) If not in emergency "both red" state, apply self-organizing rules
         if not self.both_red:
-            self._apply_rules_for_direction(
-                self.lane_A, self.lane_B, self.light_A, self.light_B, "A"
-            )
-            self._apply_rules_for_direction(
-                self.lane_B, self.lane_A, self.light_B, self.light_A, "B"
-            )
+            self._apply_rules_for_traffic_flow()
 
-    def _apply_rules_for_direction(
-        self,
-        lane_red: Lane,
-        lane_green: Lane,
-        light_red: TrafficLight,
-        light_green: TrafficLight,
-        label: str,
-    ):
+    def _apply_rules_for_traffic_flow(self):
+        # Get counts for both lanes
+        count_A = self.lane_A.count_approaching_within(self.d)
+        count_B = self.lane_B.count_approaching_within(self.d)
+
         # Rule 1: Add to counter if light is red
-        if light_red.state == "red":
-            c = lane_red.count_approaching_within(self.d)
-            if label == "A":
-                self.counter_A += c
-            else:
-                self.counter_B += c
+        if self.light_A.state == "red":
+            self.counter_A += count_A
+        if self.light_B.state == "red":
+            self.counter_B += count_B
 
-        # Check conditions for a switch, in order of priority
+        # Determine which lane should get green light
+        target = self._determine_change_target(count_A, count_B)
+
+        if target == "A" and self.light_A.state == "red":
+            self._change_to_A()
+        elif target == "B" and self.light_B.state == "red":
+            self._change_to_B()
+
+    def _determine_change_target(self, count_A, count_B):
+        # Current green lane
+        current_green_lane = (
+            self.lane_A if self.light_A.state == "green" else self.lane_B
+        )
+        current_green_light = (
+            self.light_A if self.light_A.state == "green" else self.light_B
+        )
+
+        # Check if a change is needed based on rules
+        should_change = False
 
         # Rule 5: A car is stopped beyond e in the green direction -> change
-        if lane_green.has_stopped_beyond_intersection_within(self.e):
-            self._attempt_change(light_green, light_red, label)
-            return
+        if current_green_lane.has_stopped_beyond_intersection_within(self.e):
+            should_change = True
 
-        # Rule 4: No cars in green direction, but at least one in red direction -> change
-        green_has_any_in_d = lane_green.count_approaching_within(self.d) > 0
-        red_has_any_in_d = lane_red.count_approaching_within(self.d) > 0
-        if (not green_has_any_in_d) and red_has_any_in_d:
-            self._attempt_change(light_green, light_red, label)
-            return
-
-        # Rule 1 (cont.): The counter for the red light exceeds the threshold n -> change
-        counter_val = self.counter_A if label == "A" else self.counter_B
-        if counter_val > self.n:
-            self._attempt_change(light_green, light_red, label)
-            return
-
-    def _attempt_change(
-        self, current_green: TrafficLight, current_red: TrafficLight, label: str
-    ):
-        # Rule 2: Must stay green for minimum time u
-        if current_green.green_time < self.u:
-            return
-
-        # Rule 3: Don't switch if a few cars (m or less) are about to cross
-        close_to_cross = (
-            self.lane_A.count_within_r_to_cross(self.r)
-            if current_green.name == "A"
-            else self.lane_B.count_within_r_to_cross(self.r)
+        # Rule 4: No cars in green, but at least one in red
+        green_has_any_in_d = current_green_lane.count_approaching_within(self.d) > 0
+        red_has_any_in_d = (
+            count_A > 0 if current_green_lane == self.lane_B else count_B > 0
         )
-        if close_to_cross <= self.m and close_to_cross > 0:
-            return
+        if (not green_has_any_in_d) and red_has_any_in_d:
+            should_change = True
 
-        # If all checks pass, perform the switch instantly
-        current_green.set_red()
-        current_red.set_green()
+        # Rule 1 (cont.): The counter for the red light exceeds the threshold n
+        counter_val = (
+            self.counter_B if current_green_lane == self.lane_A else self.counter_A
+        )
+        if counter_val > self.n:
+            should_change = True
+
+        # Apply restrictions (Rule 2 and 3) before deciding the target
+        if not should_change:
+            return None
+
+        # Rule 2: Must stay green for minimum time u
+        if current_green_light.green_time < self.u:
+            return None
+
+        # Rule 3: Don't switch if a few cars are crossing
+        close_to_cross = current_green_lane.count_within_r_to_cross(self.r)
+        if close_to_cross <= self.m and close_to_cross > 0:
+            return None
+
+        # If all checks pass, determine the target based on need
+        if self.light_A.state == "green":
+            return "B"
+        else:
+            return "A"
+
+    def _change_to_A(self):
+        self.light_B.set_red()
+        self.light_A.set_green()
+        self.counter_B = 0
+
+    def _change_to_B(self):
+        self.light_A.set_red()
+        self.light_B.set_green()
+        self.counter_A = 0
 
     def get_state(self):
         return {
