@@ -1,15 +1,12 @@
-# semaforos/gui.py
+# semaforos/gui.py - Interfaz corregida
 """
-Interfaz gráfica final para la simulación usando pygame.
+Interfaz gráfica corregida para la simulación.
 
-Características:
-- Zonas D, R, E dibujadas como bandas del tamaño del cruce.
-- Flechas orientadas correctamente: A (→), B (↓).
-- Separación visual mínima entre vehículos: 5 px.
-- Vehículos visibles mientras cruzan y hasta salir fuera de pantalla.
-- Sólo 2 semáforos: A (izquierda) y B (arriba).
-- No borra vehículos; la limpieza la hace Lane cuando corresponde.
-- Controles: SPACE pausa/reanuda | UP/DOWN velocidad | LEFT/RIGHT spawn rate | ESC salir
+Correcciones principales:
+1. El cruce está definido por las líneas punteadas blancas, no las negras
+2. Los vehículos se detienen exactamente en las líneas punteadas cuando el semáforo está rojo
+3. Las zonas D, R, E están correctamente posicionadas respecto al verdadero cruce
+4. Mejor lógica de movimiento que evita el comportamiento errático
 """
 
 import pygame
@@ -21,468 +18,660 @@ from .lane import Lane
 WHITE = (250, 250, 250)
 BLACK = (10, 10, 10)
 ROAD = (200, 200, 200)
-LANE_MARK = (230, 230, 230)
+LANE_MARK = (255, 255, 255)  # Blanco puro para las líneas punteadas
 RED = (220, 50, 50)
 GREEN = (50, 200, 80)
 YELLOW = (240, 200, 60)
 BLUE = (60, 110, 200)
 MAGENTA = (170, 70, 170)
 DARK_GREY = (120, 120, 120)
+LIGHT_GREY = (180, 180, 180)
 
-# Zonas (RGBA) - semitransparente
-ZONE_D = (180, 200, 255, 110)  # azul claro
-ZONE_R = (200, 255, 200, 110)  # verde claro
-ZONE_E = (255, 200, 200, 110)  # rojo claro
+# Zonas (RGBA) - más sutiles
+ZONE_D = (100, 150, 255, 60)  # azul para detección
+ZONE_R = (255, 200, 100, 60)  # naranja para restricción
+ZONE_E = (255, 100, 100, 60)  # rojo para emergencia
 
 
 class GUI:
-    def __init__(self, sim: Simulation, width: int = 1000, height: int = 700):
+    def __init__(self, sim: Simulation, width: int = 1200, height: int = 800):
         pygame.init()
         self.sim = sim
         self.width = width
         self.height = height
         self.screen = pygame.display.set_mode((width, height))
-        pygame.display.set_caption("Semáforos Auto-organizantes - Simulación")
+        pygame.display.set_caption("Semáforos Auto-organizantes - Simulación Corregida")
         self.clock = pygame.time.Clock()
-        self.font = pygame.font.SysFont("Arial", 18)
-        self.small_font = pygame.font.SysFont("Arial", 14)
+        self.font = pygame.font.SysFont("Arial", 16)
+        self.small_font = pygame.font.SysFont("Arial", 12)
 
-        # layout
-        self.stop_x = width // 2
-        self.stop_y = height // 2
-        self.road_half_width = 80
+        # Coordenadas del cruce (centro de la pantalla)
+        self.center_x = width // 2
+        self.center_y = height // 2
+        self.road_width = 160  # Ancho total de la carretera
+        self.lane_width = 40  # Ancho de cada carril
 
-        # visual vehicle sizes and spacing
+        # Las líneas punteadas definen el VERDADERO cruce
+        self.intersection_size = 120  # Tamaño del área de cruce
+
+        # Líneas de parada (donde se detienen los vehículos con semáforo rojo)
+        self.stop_line_A_x = self.center_x - self.intersection_size // 2
+        self.stop_line_B_y = self.center_y - self.intersection_size // 2
+
+        # Tamaños de vehículos
         self.vehicle_w = 28
-        self.vehicle_h = 18
-        self.min_pixel_gap = 5  # separación visual mínima, como pediste
+        self.vehicle_h = 16
+        self.min_pixel_gap = 6
 
-        # controls
+        # Controles
         self.paused = False
-        self.speedup = 1  # pasos de simulación por frame (1 por defecto)
+        self.speedup = 1
+        self.show_zones = True
+        self.show_stats = True
 
-    # ---------- utilidades de mapeo ----------
-    def _map_horizontal_pos_to_pixel(self, position: float, lane: Lane) -> int:
+    def _map_position_A_to_pixel(self, position: float, lane: Lane) -> int:
         """
-        position >= 0 : aproximación desde la izquierda hacia stop_x
-        position < 0  : ya cruzó, se mueve hacia la derecha
+        Mapea posición del carril A (horizontal) a coordenada X.
+        position = 0 es exactamente la línea de parada del cruce.
         """
         if position >= 0:
+            # Acercándose desde la izquierda hacia la línea de parada
             frac = min(position / max(1.0, lane.lane_length), 1.0)
-            x = int(self.stop_x - frac * (self.stop_x - 100))
+            x = int(self.stop_line_A_x - frac * (self.stop_line_A_x - 50))
         else:
+            # Ya cruzó, moviéndose hacia la derecha
             frac = min((-position) / max(1.0, lane.lane_length), 1.0)
-            x = int(self.stop_x + frac * (self.width - self.stop_x - 100))
+            x = int(
+                self.stop_line_A_x
+                + self.intersection_size
+                + frac * (self.width - self.stop_line_A_x - self.intersection_size - 50)
+            )
         return x
 
-    def _map_vertical_pos_to_pixel(self, position: float, lane: Lane) -> int:
+    def _map_position_B_to_pixel(self, position: float, lane: Lane) -> int:
         """
-        position >= 0 : aproximación desde arriba hacia stop_y
-        position < 0  : ya cruzó, se mueve hacia abajo
+        Mapea posición del carril B (vertical) a coordenada Y.
+        position = 0 es exactamente la línea de parada del cruce.
         """
         if position >= 0:
+            # Acercándose desde arriba hacia la línea de parada
             frac = min(position / max(1.0, lane.lane_length), 1.0)
-            y = int(self.stop_y - frac * (self.stop_y - 100))
+            y = int(self.stop_line_B_y - frac * (self.stop_line_B_y - 50))
         else:
+            # Ya cruzó, moviéndose hacia abajo
             frac = min((-position) / max(1.0, lane.lane_length), 1.0)
-            y = int(self.stop_y + frac * (self.height - self.stop_y - 100))
+            y = int(
+                self.stop_line_B_y
+                + self.intersection_size
+                + frac
+                * (self.height - self.stop_line_B_y - self.intersection_size - 50)
+            )
         return y
 
-    # ---------- dibujo de carretera y marcas ----------
-    def _draw_road(self):
-        # carretera horizontal y vertical (cruce central)
+    def _draw_road_infrastructure(self):
+        """Dibuja la infraestructura de la carretera."""
+        # Carretera horizontal completa
         pygame.draw.rect(
             self.screen,
             ROAD,
-            (
-                0,
-                self.stop_y - self.road_half_width,
-                self.width,
-                self.road_half_width * 2,
-            ),
-        )
-        pygame.draw.rect(
-            self.screen,
-            ROAD,
-            (
-                self.stop_x - self.road_half_width,
-                0,
-                self.road_half_width * 2,
-                self.height,
-            ),
+            (0, self.center_y - self.road_width // 2, self.width, self.road_width),
         )
 
-        # marcas punteadas horizontales (definen el cruce)
-        dash_w = 20
-        gap = 14
-        y_top = int(self.stop_y - self.road_half_width / 2)
-        y_bottom = int(self.stop_y + self.road_half_width / 2 - 6)
+        # Carretera vertical completa
+        pygame.draw.rect(
+            self.screen,
+            ROAD,
+            (self.center_x - self.road_width // 2, 0, self.road_width, self.height),
+        )
+
+        # Dibujar las líneas punteadas que definen el VERDADERO cruce
+        self._draw_intersection_boundaries()
+
+        # Dibujar líneas divisorias de carriles (líneas negras finas en el centro)
+        self._draw_lane_dividers()
+
+    def _draw_intersection_boundaries(self):
+        """
+        Dibuja las líneas punteadas BLANCAS que definen el área de cruce.
+        Estas son las líneas de referencia para los semáforos.
+        """
+        dash_w, gap = 20, 12
+
+        # Líneas horizontales del cruce (arriba y abajo)
+        y_top = self.center_y - self.intersection_size // 2
+        y_bottom = self.center_y + self.intersection_size // 2
+
+        # Línea superior del cruce
         x = 20
         while x < self.width:
-            pygame.draw.rect(self.screen, LANE_MARK, (x, y_top - 6, dash_w, 6))
-            pygame.draw.rect(self.screen, LANE_MARK, (x, y_bottom, dash_w, 6))
+            if not (
+                self.center_x - self.intersection_size // 2
+                <= x
+                <= self.center_x + self.intersection_size // 2
+            ):
+                pygame.draw.rect(self.screen, LANE_MARK, (x, y_top - 3, dash_w, 6))
             x += dash_w + gap
 
-        # marcas punteadas verticales
+        # Línea inferior del cruce
+        x = 20
+        while x < self.width:
+            if not (
+                self.center_x - self.intersection_size // 2
+                <= x
+                <= self.center_x + self.intersection_size // 2
+            ):
+                pygame.draw.rect(self.screen, LANE_MARK, (x, y_bottom - 3, dash_w, 6))
+            x += dash_w + gap
+
+        # Líneas verticales del cruce (izquierda y derecha)
+        x_left = self.center_x - self.intersection_size // 2
+        x_right = self.center_x + self.intersection_size // 2
+
+        # Línea izquierda del cruce
         y = 20
-        x_left = int(self.stop_x - self.road_half_width / 2)
-        x_right = int(self.stop_x + self.road_half_width / 2 - 6)
         while y < self.height:
-            pygame.draw.rect(self.screen, LANE_MARK, (x_left - 6, y, 6, dash_w))
-            pygame.draw.rect(self.screen, LANE_MARK, (x_right, y, 6, dash_w))
+            if not (
+                self.center_y - self.intersection_size // 2
+                <= y
+                <= self.center_y + self.intersection_size // 2
+            ):
+                pygame.draw.rect(self.screen, LANE_MARK, (x_left - 3, y, 6, dash_w))
             y += dash_w + gap
 
-        # líneas de detención (más sutiles)
+        # Línea derecha del cruce
+        y = 20
+        while y < self.height:
+            if not (
+                self.center_y - self.intersection_size // 2
+                <= y
+                <= self.center_y + self.intersection_size // 2
+            ):
+                pygame.draw.rect(self.screen, LANE_MARK, (x_right - 3, y, 6, dash_w))
+            y += dash_w + gap
+
+    def _draw_lane_dividers(self):
+        """Dibuja las líneas divisorias finas en el centro de las carreteras."""
+        # Línea divisoria horizontal
         pygame.draw.line(
-            self.screen,
-            BLACK,
-            (self.stop_x - 6, self.stop_y - self.road_half_width),
-            (self.stop_x - 6, self.stop_y + self.road_half_width),
-            3,
-        )
-        pygame.draw.line(
-            self.screen,
-            BLACK,
-            (self.stop_x + 6, self.stop_y - self.road_half_width),
-            (self.stop_x + 6, self.stop_y + self.road_half_width),
-            3,
-        )
-        pygame.draw.line(
-            self.screen,
-            BLACK,
-            (self.stop_x - self.road_half_width, self.stop_y - 6),
-            (self.stop_x + self.road_half_width, self.stop_y - 6),
-            3,
-        )
-        pygame.draw.line(
-            self.screen,
-            BLACK,
-            (self.stop_x - self.road_half_width, self.stop_y + 6),
-            (self.stop_x + self.road_half_width, self.stop_y + 6),
-            3,
+            self.screen, LIGHT_GREY, (0, self.center_y), (self.width, self.center_y), 2
         )
 
-    # ---------- dibujo de zonas D / R / E ----------
+        # Línea divisoria vertical
+        pygame.draw.line(
+            self.screen, LIGHT_GREY, (self.center_x, 0), (self.center_x, self.height), 2
+        )
+
     def _draw_zones(self):
+        """Dibuja las zonas D, R, E correctamente posicionadas."""
+        if not self.show_zones:
+            return
+
         inter = self.sim.intersection
-        la = inter.lane_A
-        lb = inter.lane_B
-        d = inter.d
-        r = inter.r
-        e = inter.e
-
-        # helpers para convertir dist a píxeles (en la aproximación)
-        def to_px_h(dist, lane):
-            frac = min(dist / max(1.0, lane.lane_length), 1.0)
-            return int(frac * (self.stop_x - 100))
-
-        def to_px_v(dist, lane):
-            frac = min(dist / max(1.0, lane.lane_length), 1.0)
-            return int(frac * (self.stop_y - 100))
+        d, r, e = inter.d, inter.r, inter.e
 
         surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
 
-        # Horizontal (izquierda -> stop_x)
-        px_d = to_px_h(d, la)
-        px_r = to_px_h(r, la)
-        px_e = to_px_h(e, la)
-        # Dibujar D (más lejana), R (intermedia) y E (más cercana)
-        rect_d = (
-            self.stop_x - px_d - self.road_half_width,
-            self.stop_y - self.road_half_width,
-            px_d,
-            self.road_half_width * 2,
-        )
-        rect_r = (
-            self.stop_x - px_r - self.road_half_width,
-            self.stop_y - self.road_half_width,
-            px_r,
-            self.road_half_width * 2,
-        )
-        rect_e = (
-            self.stop_x - px_e - self.road_half_width,
-            self.stop_y - self.road_half_width,
-            px_e,
-            self.road_half_width * 2,
-        )
-        if rect_d[2] > 0:
-            surf.fill(ZONE_D, rect_d)
-        if rect_r[2] > 0:
-            surf.fill(ZONE_R, rect_r)
-        if rect_e[2] > 0:
-            surf.fill(ZONE_E, rect_e)
+        # Conversión de distancias a píxeles
+        def dist_to_pixels_h(dist):
+            return int((dist / inter.lane_A.lane_length) * (self.stop_line_A_x - 50))
 
-        # Vertical (arriba -> stop_y)
-        py_d = to_px_v(d, lb)
-        py_r = to_px_v(r, lb)
-        py_e = to_px_v(e, lb)
-        rect_dv = (
-            self.stop_x - self.road_half_width,
-            self.stop_y - py_d - self.road_half_width,
-            self.road_half_width * 2,
-            py_d,
-        )
-        rect_rv = (
-            self.stop_x - self.road_half_width,
-            self.stop_y - py_r - self.road_half_width,
-            self.road_half_width * 2,
-            py_r,
-        )
-        rect_ev = (
-            self.stop_x - self.road_half_width,
-            self.stop_y - py_e - self.road_half_width,
-            self.road_half_width * 2,
-            py_e,
-        )
-        if rect_dv[3] > 0:
-            surf.fill(ZONE_D, rect_dv)
-        if rect_rv[3] > 0:
-            surf.fill(ZONE_R, rect_rv)
-        if rect_ev[3] > 0:
-            surf.fill(ZONE_E, rect_ev)
+        def dist_to_pixels_v(dist):
+            return int((dist / inter.lane_B.lane_length) * (self.stop_line_B_y - 50))
+
+        # Zonas para carril A (horizontal)
+        px_d = dist_to_pixels_h(d)
+        px_r = dist_to_pixels_h(r)
+        px_e = dist_to_pixels_h(e)
+
+        # Zona D (detección) - antes del cruce
+        if px_d > 0:
+            zone_d_rect = (
+                self.stop_line_A_x - px_d,
+                self.center_y - self.lane_width,
+                px_d,
+                self.lane_width * 2,
+            )
+            surf.fill(ZONE_D, zone_d_rect)
+
+        # Zona R (restricción) - cerca del cruce
+        if px_r > 0:
+            zone_r_rect = (
+                self.stop_line_A_x - px_r,
+                self.center_y - self.lane_width,
+                px_r,
+                self.lane_width * 2,
+            )
+            surf.fill(ZONE_R, zone_r_rect)
+
+        # Zona E (emergencia) - después del cruce
+        if px_e > 0:
+            zone_e_rect = (
+                self.stop_line_A_x + self.intersection_size,
+                self.center_y - self.lane_width,
+                px_e,
+                self.lane_width * 2,
+            )
+            surf.fill(ZONE_E, zone_e_rect)
+
+        # Zonas para carril B (vertical)
+        py_d = dist_to_pixels_v(d)
+        py_r = dist_to_pixels_v(r)
+        py_e = dist_to_pixels_v(e)
+
+        # Zona D (detección)
+        if py_d > 0:
+            zone_d_rect = (
+                self.center_x - self.lane_width,
+                self.stop_line_B_y - py_d,
+                self.lane_width * 2,
+                py_d,
+            )
+            surf.fill(ZONE_D, zone_d_rect)
+
+        # Zona R (restricción)
+        if py_r > 0:
+            zone_r_rect = (
+                self.center_x - self.lane_width,
+                self.stop_line_B_y - py_r,
+                self.lane_width * 2,
+                py_r,
+            )
+            surf.fill(ZONE_R, zone_r_rect)
+
+        # Zona E (emergencia)
+        if py_e > 0:
+            zone_e_rect = (
+                self.center_x - self.lane_width,
+                self.stop_line_B_y + self.intersection_size,
+                self.lane_width * 2,
+                py_e,
+            )
+            surf.fill(ZONE_E, zone_e_rect)
 
         self.screen.blit(surf, (0, 0))
 
-    # ---------- dibujo de vehículos ----------
+        # Etiquetas de las zonas
+        self._draw_zone_labels()
+
+    def _draw_zone_labels(self):
+        """Dibuja etiquetas identificando las zonas."""
+        # Etiquetas para carril A
+        label_y = self.center_y - self.lane_width - 20
+
+        # Zona D
+        d_label = self.small_font.render("D", True, BLACK)
+        self.screen.blit(d_label, (self.stop_line_A_x - 100, label_y))
+
+        # Zona R
+        r_label = self.small_font.render("R", True, BLACK)
+        self.screen.blit(r_label, (self.stop_line_A_x - 30, label_y))
+
+        # Zona E
+        e_label = self.small_font.render("E", True, BLACK)
+        self.screen.blit(
+            e_label, (self.stop_line_A_x + self.intersection_size + 10, label_y)
+        )
+
+        # Etiquetas para carril B
+        label_x = self.center_x - self.lane_width - 20
+
+        d_label = self.small_font.render("D", True, BLACK)
+        self.screen.blit(d_label, (label_x, self.stop_line_B_y - 100))
+
+        r_label = self.small_font.render("R", True, BLACK)
+        self.screen.blit(r_label, (label_x, self.stop_line_B_y - 30))
+
+        e_label = self.small_font.render("E", True, BLACK)
+        self.screen.blit(
+            e_label, (label_x, self.stop_line_B_y + self.intersection_size + 10)
+        )
+
     def _draw_vehicles(self):
-        inter = self.sim.intersection
-        la = inter.lane_A
-        lb = inter.lane_B
+        """Dibuja todos los vehículos con posicionamiento correcto."""
+        # Dibujar vehículos del carril A (horizontal)
+        self._draw_lane_A_vehicles()
 
-        # --- Lane A (horizontal, → ) ---
-        # mantener la lista completa para poder dibujar vehículos que ya cruzaron (position < 0)
-        # pero aplicaremos separación visual mínima solo en la aproximación (position >= 0),
-        # para que en la cola se vean ordenados y separados.
-        approach_a = sorted(
-            [v for v in la.vehicles if v.position >= 0], key=lambda v: v.position
+        # Dibujar vehículos del carril B (vertical)
+        self._draw_lane_B_vehicles()
+
+    def _draw_lane_A_vehicles(self):
+        """Dibuja vehículos del carril A con separación adecuada."""
+        lane_a = self.sim.intersection.lane_A
+        if not lane_a.vehicles:
+            return
+
+        # Separar vehículos por su posición respecto al cruce
+        approaching = [v for v in lane_a.vehicles if v.position >= 0]
+        crossing = [v for v in lane_a.vehicles if v.position < 0]
+
+        y_position = self.center_y - self.lane_width // 2
+
+        # Dibujar vehículos que se acercan (con separación visual)
+        if approaching:
+            approaching.sort(key=lambda v: v.position)
+            pixel_positions = []
+
+            for v in approaching:
+                x = self._map_position_A_to_pixel(v.position, lane_a)
+
+                # Aplicar separación mínima visual
+                if pixel_positions:
+                    min_x = pixel_positions[-1] - (self.vehicle_w + self.min_pixel_gap)
+                    if x > min_x:
+                        x = min_x
+
+                pixel_positions.append(x)
+                self._draw_vehicle(v, x, y_position, True)
+
+        # Dibujar vehículos que ya cruzaron
+        for v in crossing:
+            x = self._map_position_A_to_pixel(v.position, lane_a)
+            self._draw_vehicle(v, x, y_position, True)
+
+    def _draw_lane_B_vehicles(self):
+        """Dibuja vehículos del carril B con separación adecuada."""
+        lane_b = self.sim.intersection.lane_B
+        if not lane_b.vehicles:
+            return
+
+        approaching = [v for v in lane_b.vehicles if v.position >= 0]
+        crossing = [v for v in lane_b.vehicles if v.position < 0]
+
+        x_position = self.center_x + self.lane_width // 2
+
+        # Dibujar vehículos que se acercan
+        if approaching:
+            approaching.sort(key=lambda v: v.position)
+            pixel_positions = []
+
+            for v in approaching:
+                y = self._map_position_B_to_pixel(v.position, lane_b)
+
+                # Aplicar separación mínima visual
+                if pixel_positions:
+                    min_y = pixel_positions[-1] - (self.vehicle_h + self.min_pixel_gap)
+                    if y > min_y:
+                        y = min_y
+
+                pixel_positions.append(y)
+                self._draw_vehicle(v, x_position, y, False)
+
+        # Dibujar vehículos que ya cruzaron
+        for v in crossing:
+            y = self._map_position_B_to_pixel(v.position, lane_b)
+            self._draw_vehicle(v, x_position, y, False)
+
+    def _draw_vehicle(self, vehicle, x, y, is_horizontal):
+        """Dibuja un vehículo individual."""
+        # Color según el carril y estado
+        if is_horizontal:
+            base_color = BLUE
+        else:
+            base_color = MAGENTA
+
+        color = base_color if not vehicle.stopped else DARK_GREY
+
+        # Dibujar rectángulo del vehículo
+        rect = pygame.Rect(
+            x - self.vehicle_w // 2,
+            y - self.vehicle_h // 2,
+            self.vehicle_w,
+            self.vehicle_h,
         )
-        # mapear a pixeles
-        pixels = []
-        for v in approach_a:
-            x = self._map_horizontal_pos_to_pixel(v.position, la)
-            pixels.append((v, x))
-        # aplicar separación visual mínima (de adelante hacia atrás)
-        adjusted = []
-        for i, (v, x) in enumerate(pixels):
-            if i == 0:
-                adjusted.append((v, x))
-            else:
-                prev_x = adjusted[-1][1]
-                min_x = prev_x - (self.vehicle_w + self.min_pixel_gap)
-                if x > min_x:
-                    x = min_x
-                adjusted.append((v, x))
+        pygame.draw.rect(self.screen, color, rect, border_radius=4)
+        pygame.draw.rect(self.screen, BLACK, rect, 2, border_radius=4)
 
-        # dibujar la aproximación A
-        y_a = self.stop_y - int(self.road_half_width / 3)
-        for v, x in adjusted:
-            color = BLUE if not v.stopped else DARK_GREY
-            rect = pygame.Rect(
-                x - self.vehicle_w // 2,
-                y_a - self.vehicle_h // 2,
-                self.vehicle_w,
-                self.vehicle_h,
-            )
-            pygame.draw.rect(self.screen, color, rect, border_radius=5)
-            # flecha a la derecha (→)
-            ax = x + self.vehicle_w // 2 - 4
-            ay = y_a
-            pygame.draw.polygon(
-                self.screen, BLACK, [(ax, ay), (ax + 8, ay - 6), (ax + 8, ay + 6)]
-            )
+        # Flecha direccional
+        if is_horizontal:
+            # Flecha hacia la derecha
+            arrow_points = [
+                (x + self.vehicle_w // 2 - 8, y),
+                (x + self.vehicle_w // 2 - 2, y - 4),
+                (x + self.vehicle_w // 2 - 2, y + 4),
+            ]
+        else:
+            # Flecha hacia abajo
+            arrow_points = [
+                (x, y + self.vehicle_h // 2 - 8),
+                (x - 4, y + self.vehicle_h // 2 - 2),
+                (x + 4, y + self.vehicle_h // 2 - 2),
+            ]
 
-        # dibujar vehículos que ya cruzaron (position < 0) para que se vean en la parte derecha hasta salir
-        beyond_a = sorted(
-            [v for v in la.vehicles if v.position < 0], key=lambda v: v.position
-        )  # más negativo -> más lejos
-        for v in beyond_a:
-            x = self._map_horizontal_pos_to_pixel(v.position, la)
-            color = BLUE if not v.stopped else DARK_GREY
-            rect = pygame.Rect(
-                x - self.vehicle_w // 2,
-                y_a - self.vehicle_h // 2,
-                self.vehicle_w,
-                self.vehicle_h,
-            )
-            pygame.draw.rect(self.screen, color, rect, border_radius=5)
-            ax = x + self.vehicle_w // 2 - 4
-            ay = y_a
-            pygame.draw.polygon(
-                self.screen, BLACK, [(ax, ay), (ax + 8, ay - 6), (ax + 8, ay + 6)]
-            )
-
-        # --- Lane B (vertical, ↓) ---
-        approach_b = sorted(
-            [v for v in lb.vehicles if v.position >= 0], key=lambda v: v.position
-        )
-        pixels_b = []
-        for v in approach_b:
-            y = self._map_vertical_pos_to_pixel(v.position, lb)
-            pixels_b.append((v, y))
-        adjusted_b = []
-        for i, (v, y) in enumerate(pixels_b):
-            if i == 0:
-                adjusted_b.append((v, y))
-            else:
-                prev_y = adjusted_b[-1][1]
-                min_y = prev_y - (self.vehicle_h + self.min_pixel_gap)
-                if y > min_y:
-                    y = min_y
-                adjusted_b.append((v, y))
-
-        x_b = self.stop_x + int(self.road_half_width / 3)
-        for v, y in adjusted_b:
-            color = MAGENTA if not v.stopped else DARK_GREY
-            rect = pygame.Rect(
-                x_b - self.vehicle_w // 2,
-                y - self.vehicle_h // 2,
-                self.vehicle_w,
-                self.vehicle_h,
-            )
-            pygame.draw.rect(self.screen, color, rect, border_radius=5)
-            # flecha hacia abajo (↓)
-            ax = x_b
-            ay = y + self.vehicle_h // 2 - 4
-            pygame.draw.polygon(
-                self.screen, BLACK, [(ax, ay), (ax - 6, ay + 8), (ax + 6, ay + 8)]
-            )
-
-        # vehículos que ya cruzaron verticalmente (position < 0) -> se muestran hacia abajo
-        beyond_b = sorted(
-            [v for v in lb.vehicles if v.position < 0], key=lambda v: v.position
-        )
-        for v in beyond_b:
-            y = self._map_vertical_pos_to_pixel(v.position, lb)
-            color = MAGENTA if not v.stopped else DARK_GREY
-            rect = pygame.Rect(
-                x_b - self.vehicle_w // 2,
-                y - self.vehicle_h // 2,
-                self.vehicle_w,
-                self.vehicle_h,
-            )
-            pygame.draw.rect(self.screen, color, rect, border_radius=5)
-            ax = x_b
-            ay = y + self.vehicle_h // 2 - 4
-            pygame.draw.polygon(
-                self.screen, BLACK, [(ax, ay), (ax - 6, ay + 8), (ax + 6, ay + 8)]
-            )
-
-    # ---------- dibujo de semáforos ----------
-    def _draw_traffic_light_panel(self, light, px, py, panel_w=34, panel_h=90):
-        pygame.draw.rect(
-            self.screen, (40, 40, 40), (px, py, panel_w, panel_h), border_radius=6
-        )
-        for i, col in enumerate([RED, YELLOW, GREEN]):
-            r = 10
-            cy = py + 18 + i * 28
-            on = (
-                (light.state == "red" and i == 0)
-                or (light.state == "yellow" and i == 1)
-                or (light.state == "green" and i == 2)
-            )
-            draw_col = col if on else (60, 60, 60)
-            pygame.draw.circle(self.screen, draw_col, (px + panel_w // 2, cy), r)
+        pygame.draw.polygon(self.screen, WHITE, arrow_points)
 
     def _draw_traffic_lights(self):
+        """Dibuja los semáforos en las posiciones correctas."""
         inter = self.sim.intersection
-        la = inter.light_A
-        lb = inter.light_B
-        # Solo 2 semáforos: A (left) y B (top)
-        px_a = self.stop_x - self.road_half_width - 60
-        py_a = self.stop_y - 30
-        self._draw_traffic_light_panel(la, px_a, py_a)
-        self.screen.blit(
-            self.small_font.render(f"A:{la.state} g={la.green_time}", True, BLACK),
-            (px_a - 6, py_a + 96),
-        )
 
-        px_b = self.stop_x - 17
-        py_b = self.stop_y - self.road_half_width - 120
-        self._draw_traffic_light_panel(lb, px_b, py_b)
-        self.screen.blit(
-            self.small_font.render(f"B:{lb.state} g={lb.green_time}", True, BLACK),
-            (px_b - 6, py_b + 96),
-        )
+        # Semáforo para carril A (lado izquierdo del cruce)
+        light_a_x = self.stop_line_A_x - 60
+        light_a_y = self.center_y - 45
+        self._draw_traffic_light(inter.light_A, light_a_x, light_a_y, "A")
 
-    # ---------- HUD ----------
+        # Semáforo para carril B (lado superior del cruce)
+        light_b_x = self.center_x - 20
+        light_b_y = self.stop_line_B_y - 100
+        self._draw_traffic_light(inter.light_B, light_b_x, light_b_y, "B")
+
+    def _draw_traffic_light(self, light, x, y, name):
+        """Dibuja un semáforo individual."""
+        width, height = 35, 90
+
+        # Fondo del semáforo
+        pygame.draw.rect(
+            self.screen, (40, 40, 40), (x, y, width, height), border_radius=6
+        )
+        pygame.draw.rect(self.screen, BLACK, (x, y, width, height), 3, border_radius=6)
+
+        # Luces
+        colors = [RED, YELLOW, GREEN]
+        states = ["red", "yellow", "green"]
+
+        for i, (color, state) in enumerate(zip(colors, states)):
+            center_y = y + 18 + i * 25
+            radius = 10
+
+            is_on = light.state == state
+            draw_color = color if is_on else (60, 60, 60)
+
+            pygame.draw.circle(
+                self.screen, draw_color, (x + width // 2, center_y), radius
+            )
+            pygame.draw.circle(
+                self.screen, BLACK, (x + width // 2, center_y), radius, 2
+            )
+
+        # Información del semáforo
+        info = f"{name}: {light.state} (t={light.green_time})"
+        text = self.small_font.render(info, True, BLACK)
+        self.screen.blit(text, (x - 5, y + height + 5))
+
     def _draw_hud(self):
-        t = self.sim.get_time()
-        la = self.sim.intersection.lane_A
-        lb = self.sim.intersection.lane_B
-        st = self.sim.intersection.get_state()
-        lines = [
-            f"t={t}  |  pause SPACE  |  speed +/-  |  spawn +/- LEFT/RIGHT",
-            f"spawnA={la.spawn_rate:.2f}  spawnB={lb.spawn_rate:.2f}   |   cA={st['counter_A']}  cB={st['counter_B']}  both_red={st['both_red']}",
+        """Dibuja la interfaz de usuario."""
+        stats = self.sim.get_statistics()
+        inter_state = stats["intersection_state"]
+
+        # Información principal
+        info_lines = [
+            f"Tiempo: {stats['time']} | {'PAUSADO' if self.paused else f'Velocidad: {self.speedup}x'}",
+            f"Vehículos: Generados={stats['total_spawned']} | Completados={stats['total_completed']} | Eficiencia={stats['efficiency']:.1f}%",
+            f"Contadores: A={inter_state['counter_A']} | B={inter_state['counter_B']} | Cambios: {inter_state['total_changes']}",
         ]
-        y = 8
-        for ln in lines:
-            surf = self.font.render(ln, True, BLACK)
-            self.screen.blit(surf, (12, y))
+
+        if inter_state["both_red"]:
+            info_lines.append("⚠️ EMERGENCIA: Bloqueo cruzado detectado")
+
+        if inter_state["last_change_reason"]:
+            info_lines.append(f"Último cambio: {inter_state['last_change_reason']}")
+
+        # Fondo del HUD
+        hud_height = len(info_lines) * 22 + 20
+        hud_rect = pygame.Rect(10, 10, self.width - 20, hud_height)
+        pygame.draw.rect(self.screen, (255, 255, 255, 230), hud_rect)
+        pygame.draw.rect(self.screen, BLACK, hud_rect, 2)
+
+        # Texto del HUD
+        y = 20
+        for line in info_lines:
+            color = RED if "EMERGENCIA" in line else BLACK
+            text_surf = self.font.render(line, True, color)
+            self.screen.blit(text_surf, (20, y))
             y += 22
 
-        # leyenda compacta
-        legend = [
-            (BLUE, "A vehicles (→)"),
-            (MAGENTA, "B vehicles (↓)"),
-            (DARK_GREY, "stopped"),
-        ]
-        x = self.width - 260
-        y = 12
-        for col, text in legend:
-            pygame.draw.rect(self.screen, col, (x, y, 18, 12))
-            self.screen.blit(self.small_font.render(text, True, BLACK), (x + 26, y - 2))
-            y += 20
+        # Panel de controles
+        self._draw_controls()
 
-    # ---------- render completo ----------
+        # Panel de estadísticas (si está habilitado)
+        if self.show_stats:
+            self._draw_stats_panel(stats)
+
+    def _draw_controls(self):
+        """Dibuja la ayuda de controles."""
+        controls = [
+            "CONTROLES:",
+            "ESPACIO: Pausar/Reanudar",
+            "↑/↓: Velocidad",
+            "←/→: Spawn rate",
+            "Z: Zonas on/off",
+            "S: Stats on/off",
+            "R: Reiniciar",
+            "ESC: Salir",
+        ]
+
+        y_start = self.height - len(controls) * 16 - 10
+        for i, line in enumerate(controls):
+            font = self.font if i == 0 else self.small_font
+            color = DARK_GREY if i == 0 else BLACK
+            text = font.render(line, True, color)
+            self.screen.blit(text, (20, y_start + i * 16))
+
+    def _draw_stats_panel(self, stats):
+        """Dibuja panel de estadísticas detalladas."""
+        inter_state = stats["intersection_state"]
+
+        stat_lines = [
+            "ESTADÍSTICAS DETALLADAS",
+            f"Vehículos A: {inter_state['vehicles_A']} (esperando: {inter_state['waiting_A']})",
+            f"Vehículos B: {inter_state['vehicles_B']} (esperando: {inter_state['waiting_B']})",
+            f"Tiempos verde: A={inter_state['light_A_gtime']} | B={inter_state['light_B_gtime']}",
+            f"Spawn rates: A={self.sim.intersection.lane_A.spawn_rate:.3f} | B={self.sim.intersection.lane_B.spawn_rate:.3f}",
+            "",
+            "PARÁMETROS:",
+            f"d={self.sim.intersection.d} (detección)",
+            f"n={self.sim.intersection.n} (umbral contador)",
+            f"u={self.sim.intersection.u} (tiempo mín verde)",
+            f"m={self.sim.intersection.m} (vehículos cerca máx)",
+            f"r={self.sim.intersection.r} (distancia restricción)",
+            f"e={self.sim.intersection.e} (distancia emergencia)",
+        ]
+
+        # Panel en el lado derecho
+        panel_width = 300
+        panel_height = len(stat_lines) * 16 + 20
+        panel_x = self.width - panel_width - 10
+        panel_y = 150
+
+        panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
+        pygame.draw.rect(self.screen, (255, 255, 255, 240), panel_rect)
+        pygame.draw.rect(self.screen, BLACK, panel_rect, 2)
+
+        # Texto del panel
+        y = panel_y + 10
+        for line in stat_lines:
+            if line == "":
+                y += 8
+                continue
+
+            font = (
+                self.font
+                if "ESTADÍSTICAS" in line or "PARÁMETROS" in line
+                else self.small_font
+            )
+            color = (
+                DARK_GREY if "ESTADÍSTICAS" in line or "PARÁMETROS" in line else BLACK
+            )
+            text = font.render(line, True, color)
+            self.screen.blit(text, (panel_x + 10, y))
+            y += 16
+
+        # Leyenda de colores
+        self._draw_legend(panel_x, y + 10)
+
+    def _draw_legend(self, x, y):
+        """Dibuja leyenda de colores y símbolos."""
+        legend_items = [
+            (BLUE, "Vehículos A (→)"),
+            (MAGENTA, "Vehículos B (↓)"),
+            (DARK_GREY, "Detenidos"),
+            (ZONE_D[:3], "Zona D"),
+            (ZONE_R[:3], "Zona R"),
+            (ZONE_E[:3], "Zona E"),
+        ]
+
+        for i, (color, text) in enumerate(legend_items):
+            item_y = y + i * 18
+            pygame.draw.rect(self.screen, color, (x + 10, item_y, 12, 12))
+            pygame.draw.rect(self.screen, BLACK, (x + 10, item_y, 12, 12), 1)
+            text_surf = self.small_font.render(text, True, BLACK)
+            self.screen.blit(text_surf, (x + 28, item_y - 1))
+
     def draw(self):
+        """Renderiza toda la escena."""
         self.screen.fill(WHITE)
-        self._draw_road()
-        # dibujar bandas D/R/E
+        self._draw_road_infrastructure()
         self._draw_zones()
-        # dibujar vehículos (no borra nada)
         self._draw_vehicles()
-        # semáforos y HUD
         self._draw_traffic_lights()
         self._draw_hud()
         pygame.display.flip()
 
-    # ---------- loop principal ----------
     def run(self):
+        """Loop principal de la interfaz."""
         running = True
         while running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_SPACE:
+                    if event.key == pygame.K_ESCAPE:
+                        running = False
+                    elif event.key == pygame.K_SPACE:
                         self.paused = not self.paused
                     elif event.key == pygame.K_UP:
-                        self.speedup = min(6, self.speedup + 1)
+                        self.speedup = min(8, self.speedup + 1)
                     elif event.key == pygame.K_DOWN:
                         self.speedup = max(1, self.speedup - 1)
                     elif event.key == pygame.K_RIGHT:
+                        # Aumentar spawn rate
                         self.sim.intersection.lane_A.spawn_rate = min(
-                            0.9, self.sim.intersection.lane_A.spawn_rate + 0.02
+                            0.20, self.sim.intersection.lane_A.spawn_rate + 0.01
                         )
                         self.sim.intersection.lane_B.spawn_rate = min(
-                            0.9, self.sim.intersection.lane_B.spawn_rate + 0.02
+                            0.20, self.sim.intersection.lane_B.spawn_rate + 0.01
                         )
                     elif event.key == pygame.K_LEFT:
+                        # Disminuir spawn rate
                         self.sim.intersection.lane_A.spawn_rate = max(
-                            0.0, self.sim.intersection.lane_A.spawn_rate - 0.02
+                            0.01, self.sim.intersection.lane_A.spawn_rate - 0.01
                         )
                         self.sim.intersection.lane_B.spawn_rate = max(
-                            0.0, self.sim.intersection.lane_B.spawn_rate - 0.02
+                            0.01, self.sim.intersection.lane_B.spawn_rate - 0.01
                         )
-                    elif event.key == pygame.K_ESCAPE:
-                        running = False
+                    elif event.key == pygame.K_z:
+                        self.show_zones = not self.show_zones
+                    elif event.key == pygame.K_s:
+                        self.show_stats = not self.show_stats
+                    elif event.key == pygame.K_r:
+                        self.sim.reset()
 
+            # Ejecutar simulación si no está pausada
             if not self.paused:
                 for _ in range(self.speedup):
-                    self.sim.step()
+                    if not self.sim.step():
+                        break
 
             self.draw()
-            self.clock.tick(20)  # framerate - moderado para seguir visualmente
+            self.clock.tick(30)  # 30 FPS
 
         pygame.quit()
         sys.exit()
