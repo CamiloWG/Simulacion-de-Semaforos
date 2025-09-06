@@ -356,74 +356,30 @@ class GUI:
         self._draw_lane_B_vehicles()
 
     def _draw_lane_A_vehicles(self):
-        """Dibuja vehículos del carril A con mejor separación."""
+        """Dibuja vehículos del carril A con posicionamiento directo y natural - SIMPLIFICADO."""
         lane_a = self.sim.intersection.lane_A
         if not lane_a.vehicles:
             return
 
         y_position = self.center_y - self.lane_width // 2
 
-        # Procesar vehículos por grupos
-        approaching = sorted(
-            [v for v in lane_a.vehicles if v.position >= 0],
-            key=lambda v: v.position,
-            reverse=True,
-        )
-        crossing = [v for v in lane_a.vehicles if v.position < 0]
-
-        # Dibujar vehículos que se acercan con separación mejorada
-        pixel_positions = []
-        for v in approaching:
-            x = self._map_position_A_to_pixel(v.position, lane_a)
-
-            # Aplicar separación mínima
-            for existing_x in pixel_positions:
-                if abs(x - existing_x) < self.vehicle_w + self.min_pixel_gap:
-                    if x > existing_x:
-                        x = existing_x + self.vehicle_w + self.min_pixel_gap
-                    else:
-                        x = existing_x - self.vehicle_w - self.min_pixel_gap
-
-            pixel_positions.append(x)
-            self._draw_vehicle_enhanced(v, x, y_position, True)
-
-        # Dibujar vehículos que cruzaron
-        for v in crossing:
-            x = self._map_position_A_to_pixel(v.position, lane_a)
-            self._draw_vehicle_enhanced(v, x, y_position, True)
+        # NUEVO: Dibujar todos los vehículos directamente sin agrupación artificial
+        for vehicle in lane_a.vehicles:
+            x = self._map_position_A_to_pixel(vehicle.position, lane_a)
+            self._draw_vehicle_enhanced(vehicle, x, y_position, True)
 
     def _draw_lane_B_vehicles(self):
-        """Dibuja vehículos del carril B con mejor separación."""
+        """Dibuja vehículos del carril B con posicionamiento directo y natural - SIMPLIFICADO."""
         lane_b = self.sim.intersection.lane_B
         if not lane_b.vehicles:
             return
 
         x_position = self.center_x + self.lane_width // 2
 
-        approaching = sorted(
-            [v for v in lane_b.vehicles if v.position >= 0],
-            key=lambda v: v.position,
-            reverse=True,
-        )
-        crossing = [v for v in lane_b.vehicles if v.position < 0]
-
-        pixel_positions = []
-        for v in approaching:
-            y = self._map_position_B_to_pixel(v.position, lane_b)
-
-            for existing_y in pixel_positions:
-                if abs(y - existing_y) < self.vehicle_h + self.min_pixel_gap:
-                    if y > existing_y:
-                        y = existing_y + self.vehicle_h + self.min_pixel_gap
-                    else:
-                        y = existing_y - self.vehicle_h - self.min_pixel_gap
-
-            pixel_positions.append(y)
-            self._draw_vehicle_enhanced(v, x_position, y, False)
-
-        for v in crossing:
-            y = self._map_position_B_to_pixel(v.position, lane_b)
-            self._draw_vehicle_enhanced(v, x_position, y, False)
+        # NUEVO: Dibujar todos los vehículos directamente sin agrupación artificial
+        for vehicle in lane_b.vehicles:
+            y = self._map_position_B_to_pixel(vehicle.position, lane_b)
+            self._draw_vehicle_enhanced(vehicle, x_position, y, False)
 
     def _draw_vehicle_enhanced(self, vehicle, x, y, is_horizontal):
         """Dibuja un vehículo con mejor aspecto visual."""

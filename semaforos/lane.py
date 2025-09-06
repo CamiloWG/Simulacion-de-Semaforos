@@ -1,4 +1,4 @@
-# semaforos/lane.py - Sistema de flujo de tráfico completamente renovado
+# semaforos/lane.py - Sistema de flujo de tráfico completamente corregido
 from dataclasses import dataclass, field
 from typing import List, Optional
 import random
@@ -30,13 +30,17 @@ class Lane:
     vehicle_length: float = 5.0
 
     def __post_init__(self):
-        # Configurar patrones diferentes para cada carril
+        # Configurar patrones diferentes para cada carril con tasas más altas
         if self.name == "A":
             self.traffic_pattern.phase_offset = 0.0
-            self.traffic_pattern.base_rate = 0.045
+            self.traffic_pattern.base_rate = 0.08  # Tasa base más alta
+            self.traffic_pattern.peak_multiplier = 2.5  # Picos menos extremos
+            self.traffic_pattern.low_multiplier = 0.5  # Períodos bajos menos severos
         else:  # carril B
             self.traffic_pattern.phase_offset = 150.0  # desfasado
-            self.traffic_pattern.base_rate = 0.035
+            self.traffic_pattern.base_rate = 0.07  # Ligeramente diferente
+            self.traffic_pattern.peak_multiplier = 2.8
+            self.traffic_pattern.low_multiplier = 0.4
 
     def _calculate_current_spawn_rate(self) -> float:
         """Calcula la tasa de spawn actual basada en patrones de tráfico dinámicos."""
@@ -72,107 +76,147 @@ class Lane:
         self, light_green: bool, stop_line: float = 0.0, stop_buffer: float = 0.5
     ):
         """
-        Sistema de movimiento de vehículos completamente renovado.
+        Sistema de movimiento de vehículos con tráfico realista - NUEVA IMPLEMENTACIÓN.
         """
         self.traffic_pattern.current_time += 1
 
         if not self.vehicles:
             return
 
-        # Actualizar velocidades basadas en condiciones locales
-        self._update_vehicle_speeds(light_green, stop_line, stop_buffer)
+        # Ordenar vehículos por posición (más alejados primero para evitar conflictos)
+        self.vehicles.sort(key=lambda v: v.position, reverse=True)
 
-        # Mover vehículos con nueva lógica
-        self._move_vehicles_improved()
+        # Procesar cada vehículo individualmente
+        for i, vehicle in enumerate(self.vehicles):
+            self._update_single_vehicle(vehicle, i, light_green, stop_line, stop_buffer)
 
-        # Limpiar vehículos que salieron
+        # Limpiar vehículos que salieron completamente del sistema
         self.vehicles = [v for v in self.vehicles if v.position > -self.lane_length]
 
-    def _update_vehicle_speeds(
-        self, light_green: bool, stop_line: float, stop_buffer: float
+    def _update_single_vehicle(
+        self, vehicle, index, light_green, stop_line, stop_buffer
     ):
-        """Actualiza las velocidades de los vehículos basándose en las condiciones."""
-        if not self.vehicles:
-            return
+        """Actualiza un vehículo individual con lógica de tráfico realista - NUEVA FUNCIÓN."""
 
-        # Ordenar por posición (más cerca del stop line primero)
-        self.vehicles.sort(key=lambda v: v.position)
+        # 1. Determinar velocidad objetivo basada en condiciones
+        target_speed = self._calculate_target_speed(
+            vehicle, index, light_green, stop_line, stop_buffer
+        )
 
-        for i, vehicle in enumerate(self.vehicles):
-            # Velocidad base
-            target_speed = self.max_speed * random.uniform(0.85, 1.05)
+        # 2. Aplicar aceleración/desaceleración suave
+        speed_change = target_speed - vehicle.speed
+        max_acceleration = 0.4  # Aceleración máxima por step
+        max_deceleration = 0.6  # Desaceleración máxima por step
 
-            # Factor 1: Semáforo rojo
-            distance_to_stop = vehicle.position - stop_line
-            if not light_green and distance_to_stop > 0:
-                # Reducir velocidad gradualmente al acercarse al semáforo rojo
-                if distance_to_stop < 50:
-                    slow_factor = max(0.1, distance_to_stop / 50.0)
-                    target_speed *= slow_factor
+        if speed_change > max_acceleration:
+            vehicle.speed += max_acceleration
+        elif speed_change < -max_deceleration:
+            vehicle.speed -= max_deceleration
+        else:
+            vehicle.speed = target_speed
 
-                # Detener completamente cerca del stop line
-                if distance_to_stop < stop_buffer + 2.0:
+        # 3. Limitar velocidad dentro de rangos realistas
+        vehicle.speed = max(0.0, min(self.max_speed * 1.2, vehicle.speed))
+
+        # 4. Mover vehículo
+        if vehicle.speed > 0.01:
+            new_position = vehicle.position - vehicle.speed
+            vehicle.step(new_position)
+            vehicle.stopped = False
+        else:
+            vehicle.stopped = True
+
+    def _calculate_target_speed(
+        self, vehicle, index, light_green, stop_line, stop_buffer
+    ):
+        """Calcula la velocidad objetivo para un vehículo considerando todas las condiciones - NUEVA FUNCIÓN."""
+
+        # Velocidad base con variación individual
+        base_speed = self.max_speed * random.uniform(0.9, 1.1)
+        target_speed = base_speed
+
+        # Factor 1: Vehículo adelante (más importante)
+        front_vehicle = self._find_vehicle_ahead(vehicle)
+        if front_vehicle:
+            gap = front_vehicle.position - vehicle.position
+            safe_gap = self.min_gap_units + self.vehicle_length
+
+            # Distancia de seguridad más realista
+            if gap < safe_gap * 3:  # Comenzar a reducir velocidad antes
+                if gap < safe_gap:
+                    target_speed = 0.0  # Detener si está muy cerca
+                else:
+                    # Reducir velocidad gradualmente según la distancia
+                    gap_factor = (gap - safe_gap) / (safe_gap * 2)
+                    target_speed *= max(0.2, gap_factor)
+
+                # Si el vehículo de adelante está parado, parar también
+                if front_vehicle.stopped and gap < safe_gap * 1.5:
                     target_speed = 0.0
 
-            # Factor 2: Vehículo adelante
-            if i > 0:  # Hay un vehículo adelante
-                front_vehicle = self.vehicles[i - 1]
-                gap = front_vehicle.position - vehicle.position
-                safe_gap = self.min_gap_units + self.vehicle_length
+        # Factor 2: Semáforo (solo afecta si no hay vehículo adelante muy cerca)
+        if (
+            not front_vehicle
+            or (front_vehicle.position - vehicle.position) > self.min_gap_units * 2
+        ):
+            distance_to_stop = vehicle.position - stop_line
 
-                if gap < safe_gap * 2:  # Si está demasiado cerca
-                    # Ajustar velocidad para mantener distancia segura
-                    gap_factor = max(0.0, gap / (safe_gap * 2))
-                    target_speed *= gap_factor
+            if not light_green and distance_to_stop > 0:
+                # Zona de desaceleración más amplia y suave
+                deceleration_zone = 80.0  # Distancia para comenzar a frenar
 
-                    # Si el vehículo de adelante está parado
-                    if front_vehicle.stopped:
-                        target_speed = 0.0
+                if distance_to_stop < deceleration_zone:
+                    if distance_to_stop < stop_buffer + 1.0:
+                        target_speed = 0.0  # Parar en la línea
+                    else:
+                        # Desaceleración suave y progresiva
+                        slow_factor = (
+                            distance_to_stop - stop_buffer
+                        ) / deceleration_zone
+                        target_speed *= max(0.1, slow_factor)
 
-            # Factor 3: Aceleración/desaceleración suave
-            speed_diff = target_speed - vehicle.speed
-            max_acceleration = 0.3
+        return target_speed
 
-            if abs(speed_diff) > max_acceleration:
-                if speed_diff > 0:
-                    vehicle.speed += max_acceleration
-                else:
-                    vehicle.speed -= max_acceleration
-            else:
-                vehicle.speed = target_speed
+    def _find_vehicle_ahead(self, current_vehicle):
+        """Encuentra el vehículo inmediatamente adelante del vehículo actual - NUEVA FUNCIÓN."""
+        closest_vehicle = None
+        min_distance = float("inf")
 
-            # Limitar velocidad
-            vehicle.speed = max(0.0, min(self.max_speed * 1.1, vehicle.speed))
+        for other_vehicle in self.vehicles:
+            if (
+                other_vehicle.id != current_vehicle.id
+                and other_vehicle.position < current_vehicle.position
+            ):
 
-    def _move_vehicles_improved(self):
-        """Mueve los vehículos con lógica mejorada."""
-        for vehicle in self.vehicles:
-            if vehicle.speed > 0.01:
-                new_position = vehicle.position - vehicle.speed
-                vehicle.step(new_position)
-                vehicle.stopped = False
-            else:
-                vehicle.stopped = True
+                distance = current_vehicle.position - other_vehicle.position
+                if (
+                    distance < min_distance and distance < 150
+                ):  # Solo considerar vehículos cercanos
+                    min_distance = distance
+                    closest_vehicle = other_vehicle
+
+        return closest_vehicle
 
     def spawn(self, next_vehicle_id: int) -> Optional[Vehicle]:
         """
-        Genera nuevos vehículos con patrones de tráfico dinámicos.
+        Genera nuevos vehículos con mejores condiciones de spawn - MEJORADO.
         """
         current_rate = self._calculate_current_spawn_rate()
 
         if random.random() > current_rate:
             return None
 
-        # Verificar espacio disponible
+        # Verificar espacio disponible de manera más permisiva
         spawn_position = self.lane_length
-        min_spawn_gap = self.min_gap_units * 3
+        min_spawn_gap = self.min_gap_units * 1.5  # Mucho más permisivo
 
+        # Solo verificar vehículos muy cerca del punto de spawn
         for v in self.vehicles:
             if v.position > spawn_position - min_spawn_gap:
                 return None  # No hay espacio suficiente
 
-        # Crear vehículo con características variadas
-        speed_variation = random.uniform(0.8, 1.2)
+        # Crear vehículo con características variadas más realistas
+        speed_variation = random.uniform(0.8, 1.3)  # Mayor variación
         actual_speed = self.max_speed * speed_variation
 
         vehicle = Vehicle(

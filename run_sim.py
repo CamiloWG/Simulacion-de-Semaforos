@@ -39,34 +39,34 @@ def main():
     print("  • Panel de debug para verificar el funcionamiento")
     print()
 
-    # Configuración de carriles con patrones de tráfico dinámicos
+    # Configuración de carriles con patrones de tráfico más realistas
     lane_A = Lane(
         name="A",
-        max_speed=1.2,  # Velocidad ligeramente mayor
-        lane_length=450.0,  # Carriles más largos
-        min_gap_units=6.0,  # Separación más realista
-        vehicle_length=5.0,  # Longitud explícita de vehículos
+        max_speed=1.8,  # Velocidad más realista
+        lane_length=500.0,  # Carriles más largos para más vehículos
+        min_gap_units=4.0,  # Separación más permisiva entre vehículos
+        vehicle_length=4.0,  # Longitud más realista de vehículos
     )
     # El patrón de tráfico se configura automáticamente en __post_init__
 
     lane_B = Lane(
         name="B",
-        max_speed=1.1,  # Velocidades ligeramente diferentes
-        lane_length=450.0,
-        min_gap_units=6.0,
-        vehicle_length=5.0,
+        max_speed=1.7,  # Velocidades ligeramente diferentes
+        lane_length=500.0,
+        min_gap_units=4.0,
+        vehicle_length=4.0,
     )
 
-    # Configuración del cruce con parámetros optimizados
+    # Configuración del cruce con parámetros para tráfico más denso
     intersection = Intersection(
         lane_A=lane_A,
         lane_B=lane_B,
-        d=150.0,  # Distancia de detección - más amplia
-        n=12,  # Umbral del contador - más equilibrado
-        u=40,  # Tiempo mínimo en verde - suficiente para flujo
-        m=3,  # Máximo vehículos cerca para no cambiar
-        r=45.0,  # Distancia de restricción - zona crítica
-        e=30.0,  # Distancia de emergencia - detección de bloqueos
+        d=180.0,  # Distancia de detección más amplia
+        n=20,  # Umbral del contador más alto para más vehículos
+        u=15,  # Tiempo mínimo en verde ajustado
+        m=4,  # Más vehículos permitidos cerca para cambiar
+        r=50.0,  # Distancia de restricción ajustada
+        e=35.0,  # Distancia de emergencia
     )
 
     # Estado inicial: carril A en verde
@@ -130,13 +130,25 @@ def main():
     print("  • Períodos de tráfico bajo y alto")
     print()
 
-    print("🔧 PARÁMETROS ACTUALES:")
-    print(f"  d = {intersection.d} (distancia detección)")
-    print(f"  n = {intersection.n} (umbral contador)")
-    print(f"  u = {intersection.u} (tiempo mínimo verde)")
-    print(f"  m = {intersection.m} (vehículos cerca máx)")
-    print(f"  r = {intersection.r} (distancia restricción)")
-    print(f"  e = {intersection.e} (distancia emergencia)")
+    print("🔧 PARÁMETROS OPTIMIZADOS PARA TRÁFICO MÚLTIPLE:")
+    print(f"  • Velocidad máxima: A={lane_A.max_speed}, B={lane_B.max_speed}")
+    print(f"  • Separación mínima: {lane_A.min_gap_units} unidades")
+    print(f"  • Longitud carriles: {lane_A.lane_length} unidades")
+    print(f"  • Tasas de spawn base: A=0.08, B=0.07")
+    print(f"  • d = {intersection.d} (detección)")
+    print(f"  • n = {intersection.n} (umbral contador)")
+    print(f"  • u = {intersection.u} (tiempo mínimo verde)")
+    print(f"  • m = {intersection.m} (vehículos cerca máx)")
+    print(f"  • r = {intersection.r} (distancia restricción)")
+    print(f"  • e = {intersection.e} (distancia emergencia)")
+    print()
+
+    print("✅ MEJORAS IMPLEMENTADAS:")
+    print("  • Múltiples vehículos simultáneos por carril")
+    print("  • Lógica individual de decisión por vehículo")
+    print("  • Movimiento continuo a través del cruce")
+    print("  • Spawn más permisivo (min_gap reducido)")
+    print("  • Comportamiento realista de aceleración/frenado")
     print()
 
     print("Iniciando simulación mejorada...")
