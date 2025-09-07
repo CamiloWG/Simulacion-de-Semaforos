@@ -7,37 +7,29 @@ from semaforos.gui import GUI
 def main():
 
     print("=" * 80)
-    print("SIMULACIÓN DE SEMÁFOROS AUTO-ORGANIZANTES - VERSIÓN MEJORADA")
+    print("SIMULACIÓN DE SEMÁFOROS AUTO-ORGANIZANTES")
     print("=" * 80)
     print()
 
-    # Configuración de carriles con patrones de tráfico más realistas
+    # Configuración de carriles
     lane_A = Lane(
         name="A",
-        max_speed=1.8,  # Velocidad más realista
-        lane_length=600.0,  # Carriles más largos para más vehículos
-        min_gap_units=1.8,  # Antes era 3.0 (reducido 40%)
-        vehicle_length=3.5,  # Longitud más realista de vehículos
+        max_speed=1.8,
+        lane_length=600.0,
+        min_gap_units=1.8,
+        vehicle_length=3.5,
     )
-    # El patrón de tráfico se configura automáticamente en __post_init__
 
     lane_B = Lane(
         name="B",
-        max_speed=1.7,  # Velocidades ligeramente diferentes
+        max_speed=1.7,
         lane_length=600.0,
-        min_gap_units=1.8,  # Antes era 3.0 (reducido 40%)
+        min_gap_units=1.8,
         vehicle_length=3.5,
     )
 
     intersection = Intersection(
-        lane_A=lane_A,
-        lane_B=lane_B,
-        d=180.0,  # Distancia de detección más amplia
-        n=20,  # Umbral del contador más alto para más vehículos
-        u=220,  # Tiempo mínimo en verde ajustado
-        m=4,  # Más vehículos permitidos cerca para cambiar
-        r=50.0,  # Distancia de restricción ajustada
-        e=35.0,  # Distancia de emergencia
+        lane_A=lane_A, lane_B=lane_B, d=180.0, n=20, u=220, m=4, r=50.0, e=35.0
     )
 
     intersection.light_A.set_green()

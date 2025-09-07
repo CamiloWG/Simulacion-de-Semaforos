@@ -9,7 +9,6 @@ class Simulation:
         self.time = 0
         self.next_vehicle_id = 1
 
-        # Estadísticas mejoradas
         self.total_vehicles_spawned = 0
         self.total_vehicles_completed = 0
         self.total_waiting_time = 0  # Tiempo total de espera acumulado
@@ -79,7 +78,6 @@ class Simulation:
         return True
 
     def _update_waiting_metrics(self):
-        """Actualiza métricas de tiempo de espera."""
         # Sumar tiempo de espera de todos los vehículos detenidos
         waiting_A = self.intersection.lane_A.get_waiting_vehicles()
         waiting_B = self.intersection.lane_B.get_waiting_vehicles()
@@ -105,7 +103,6 @@ class Simulation:
             self.throughput_history.pop(0)
 
     def _spawn_vehicles(self):
-        """Genera nuevos vehículos en ambos carriles."""
         # Generar en carril A
         vehicle_A = self.intersection.lane_A.spawn(self.next_vehicle_id)
         if vehicle_A:
@@ -121,11 +118,9 @@ class Simulation:
             self.lane_B_spawned += 1
 
     def get_time(self):
-        """Retorna el tiempo actual."""
         return self.time
 
     def get_statistics(self):
-        """Retorna estadísticas completas de la simulación."""
         state = self.intersection.get_state()
 
         # Eficiencias por carril
@@ -168,7 +163,6 @@ class Simulation:
         }
 
     def reset(self):
-        """Reinicia la simulación."""
         self.time = 0
         self.next_vehicle_id = 1
         self.total_vehicles_spawned = 0
@@ -205,7 +199,6 @@ class Simulation:
         self.intersection.last_change_reason = ""
 
     def get_debug_info(self):
-        """Retorna información de depuración detallada."""
         return {
             "rule_checks": {
                 "vehicles_approaching_A": self.intersection.lane_A.count_approaching_within(

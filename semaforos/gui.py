@@ -1,16 +1,10 @@
-# semaforos/gui.py - Interfaz con visualización mejorada
-"""
-Interfaz gráfica mejorada con mejor visualización del flujo de tráfico
-y patrones dinámicos de generación de vehículos.
-"""
-
 import pygame
 import sys
 import math
 from .simulation import Simulation
 from .lane import Lane
 
-# Colores mejorados
+# Colores
 WHITE = (250, 250, 250)
 BLACK = (10, 10, 10)
 ROAD = (200, 200, 200)
@@ -24,12 +18,10 @@ DARK_GREY = (120, 120, 120)
 LIGHT_GREY = (180, 180, 180)
 ORANGE = (255, 140, 0)
 
-# Zonas con mejor transparencia
 ZONE_D = (100, 150, 255, 80)
 ZONE_R = (255, 200, 100, 80)
 ZONE_E = (255, 100, 100, 80)
 
-# Colores para indicadores de tráfico
 TRAFFIC_LOW = (100, 200, 100)
 TRAFFIC_MEDIUM = (200, 200, 100)
 TRAFFIC_HIGH = (200, 100, 100)
@@ -42,7 +34,7 @@ class GUI:
         self.width = width
         self.height = height
         self.screen = pygame.display.set_mode((width, height))
-        pygame.display.set_caption("Semáforos Auto-organizantes - Simulación Mejorada")
+        pygame.display.set_caption("Semáforos Auto-organizantes")
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont("Arial", 16, bold=True)
         self.small_font = pygame.font.SysFont("Arial", 12)
@@ -59,7 +51,7 @@ class GUI:
         self.stop_line_A_x = self.center_x - self.intersection_size // 2
         self.stop_line_B_y = self.center_y - self.intersection_size // 2
 
-        # Tamaños de vehículos mejorados
+        # Tamaños de vehículos
         self.vehicle_w = 30
         self.vehicle_h = 18
         self.min_pixel_gap = 8
@@ -73,7 +65,7 @@ class GUI:
         self.show_traffic_patterns = True
 
     def _map_position_A_to_pixel(self, position: float, lane: Lane) -> int:
-        """Mapea posición del carril A a coordenada X con mejor precisión."""
+        """Mapea posición del carril A a coordenada X."""
         if position >= 0:
             frac = min(position / max(1.0, lane.lane_length), 1.0)
             x = int(self.stop_line_A_x - frac * (self.stop_line_A_x - 50))
@@ -87,7 +79,7 @@ class GUI:
         return x
 
     def _map_position_B_to_pixel(self, position: float, lane: Lane) -> int:
-        """Mapea posición del carril B a coordenada Y con mejor precisión."""
+        """Mapea posición del carril B a coordenada Y."""
         if position >= 0:
             frac = min(position / max(1.0, lane.lane_length), 1.0)
             y = int(self.stop_line_B_y - frac * (self.stop_line_B_y - 50))
@@ -102,8 +94,7 @@ class GUI:
         return y
 
     def _draw_road_infrastructure(self):
-        """Dibuja la infraestructura vial mejorada."""
-        # Carreteras con bordes más definidos
+        """Dibuja la infraestructura vial."""
         # Horizontal
         pygame.draw.rect(
             self.screen,
@@ -138,7 +129,7 @@ class GUI:
             (self.center_x + self.road_width // 2 - 3, 0, 3, self.height),
         )
 
-        # Área del cruce resaltada
+        # Área del cruce
         intersection_rect = (
             self.center_x - self.intersection_size // 2,
             self.center_y - self.intersection_size // 2,
@@ -308,7 +299,6 @@ class GUI:
         )
 
     def _draw_traffic_patterns(self):
-        """Dibuja indicadores de patrones de tráfico dinámicos."""
         if not self.show_traffic_patterns:
             return
 
@@ -342,7 +332,6 @@ class GUI:
         self.screen.blit(rotated_text, (self.center_x - 58, 52))
 
     def _get_traffic_color(self, rate: float):
-        """Obtiene color basado en la tasa de tráfico."""
         if rate < 0.03:
             return TRAFFIC_LOW
         elif rate < 0.08:
@@ -351,38 +340,32 @@ class GUI:
             return TRAFFIC_HIGH
 
     def _draw_vehicles(self):
-        """Dibuja vehículos con mejor separación visual."""
         self._draw_lane_A_vehicles()
         self._draw_lane_B_vehicles()
 
     def _draw_lane_A_vehicles(self):
-        """Dibuja vehículos del carril A con posicionamiento directo y natural - SIMPLIFICADO."""
         lane_a = self.sim.intersection.lane_A
         if not lane_a.vehicles:
             return
 
         y_position = self.center_y - self.lane_width // 2
 
-        # NUEVO: Dibujar todos los vehículos directamente sin agrupación artificial
         for vehicle in lane_a.vehicles:
             x = self._map_position_A_to_pixel(vehicle.position, lane_a)
             self._draw_vehicle_enhanced(vehicle, x, y_position, True)
 
     def _draw_lane_B_vehicles(self):
-        """Dibuja vehículos del carril B con posicionamiento directo y natural - SIMPLIFICADO."""
         lane_b = self.sim.intersection.lane_B
         if not lane_b.vehicles:
             return
 
         x_position = self.center_x + self.lane_width // 2
 
-        # NUEVO: Dibujar todos los vehículos directamente sin agrupación artificial
         for vehicle in lane_b.vehicles:
             y = self._map_position_B_to_pixel(vehicle.position, lane_b)
             self._draw_vehicle_enhanced(vehicle, x_position, y, False)
 
     def _draw_vehicle_enhanced(self, vehicle, x, y, is_horizontal):
-        """Dibuja un vehículo con mejor aspecto visual."""
         # Color según estado y carril
         if is_horizontal:
             base_color = BLUE
@@ -410,7 +393,6 @@ class GUI:
         pygame.draw.rect(self.screen, color, rect, border_radius=6)
         pygame.draw.rect(self.screen, BLACK, rect, 2, border_radius=6)
 
-        # Ventanas del vehículo
         window_color = (200, 230, 255) if not vehicle.stopped else (150, 150, 150)
         window_rect = pygame.Rect(
             x - self.vehicle_w // 2 + 4,
@@ -420,7 +402,6 @@ class GUI:
         )
         pygame.draw.rect(self.screen, window_color, window_rect, border_radius=3)
 
-        # Flecha direccional mejorada
         arrow_color = WHITE if not vehicle.stopped else LIGHT_GREY
         if is_horizontal:
             arrow_points = [
@@ -436,13 +417,11 @@ class GUI:
             ]
         pygame.draw.polygon(self.screen, arrow_color, arrow_points)
 
-        # ID del vehículo (opcional, para debug)
         if self.show_debug:
             id_text = self.tiny_font.render(str(vehicle.id), True, WHITE)
             self.screen.blit(id_text, (x - 6, y - 6))
 
     def _draw_traffic_lights(self):
-        """Dibuja semáforos con mejor diseño."""
         inter = self.sim.intersection
 
         # Posiciones de los semáforos
@@ -455,7 +434,6 @@ class GUI:
         self._draw_traffic_light_enhanced(inter.light_B, light_b_x, light_b_y, "B")
 
     def _draw_traffic_light_enhanced(self, light, x, y, name):
-        """Dibuja un semáforo con diseño mejorado."""
         width, height = 40, 100
 
         # Sombra del semáforo
@@ -514,7 +492,6 @@ class GUI:
             self.screen.blit(time_text, (x - 5, y + height + 22))
 
     def _draw_hud(self):
-        """Dibuja HUD con información mejorada."""
         stats = self.sim.get_statistics()
         inter_state = stats["intersection_state"]
 
@@ -560,7 +537,6 @@ class GUI:
             self._draw_debug_panel()
 
     def _draw_controls(self):
-        """Dibuja ayuda de controles mejorada."""
         controls = [
             "CONTROLES:",
             "ESPACIO: Pausar/Reanudar",
@@ -592,7 +568,6 @@ class GUI:
             self.screen.blit(text, (20, y_start + i * 18))
 
     def _draw_stats_panel(self, stats):
-        """Dibuja panel de estadísticas mejorado."""
         inter_state = stats["intersection_state"]
         lane_A_stats = stats["lane_A"]
         lane_B_stats = stats["lane_B"]
@@ -669,11 +644,10 @@ class GUI:
         # Gráfico de rendimiento simple
         if stats["throughput_history"]:
             self._draw_throughput_graph(
-                panel_x + 10, y + 10, 280, 60, stats["throughput_history"]
+                panel_x + 10, y + 20, 280, 60, stats["throughput_history"]
             )
 
     def _draw_throughput_graph(self, x, y, width, height, data):
-        """Dibuja un gráfico simple de rendimiento."""
         if len(data) < 2:
             return
 
@@ -708,7 +682,6 @@ class GUI:
             self.screen.blit(max_text, (x + 2, y + 2))
 
     def _draw_debug_panel(self):
-        """Dibuja panel de información de debug."""
         debug_info = self.sim.get_debug_info()
         rule_checks = debug_info["rule_checks"]
         spawn_rates = debug_info["current_spawn_rates"]
@@ -822,7 +795,6 @@ class GUI:
         pygame.display.flip()
 
     def run(self):
-        """Loop principal mejorado de la interfaz."""
         running = True
 
         while running:
@@ -839,7 +811,6 @@ class GUI:
                     elif event.key == pygame.K_DOWN:
                         self.speedup = max(1, self.speedup - 1)
                     elif event.key == pygame.K_RIGHT:
-                        # Aumentar multiplicadores de pico de tráfico
                         for lane in [
                             self.sim.intersection.lane_A,
                             self.sim.intersection.lane_B,
@@ -848,7 +819,6 @@ class GUI:
                                 5.0, lane.traffic_pattern.peak_multiplier + 0.2
                             )
                     elif event.key == pygame.K_LEFT:
-                        # Disminuir multiplicadores de pico de tráfico
                         for lane in [
                             self.sim.intersection.lane_A,
                             self.sim.intersection.lane_B,
@@ -868,7 +838,6 @@ class GUI:
                         self.sim.reset()
                         print("Simulación reiniciada")
 
-            # Ejecutar simulación si no está pausada
             if not self.paused:
                 for _ in range(self.speedup):
                     if not self.sim.step():

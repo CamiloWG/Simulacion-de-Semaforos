@@ -1,4 +1,3 @@
-# semaforos/lane.py - Sistema de flujo de tráfico completamente corregido
 from dataclasses import dataclass, field
 from typing import List, Optional
 import random
@@ -30,7 +29,6 @@ class Lane:
     vehicle_length: float = 5.0
 
     def __post_init__(self):
-        # CORREGIDO: Configurar patrones más realistas e independientes por carril
         if self.name == "A":
             self.traffic_pattern.phase_offset = random.uniform(
                 0, 50
@@ -87,15 +85,11 @@ class Lane:
     def step_vehicles(
         self, light_green: bool, stop_line: float = 0.0, stop_buffer: float = 0.5
     ):
-        """
-        Sistema de movimiento de vehículos con tráfico realista - NUEVA IMPLEMENTACIÓN.
-        """
         self.traffic_pattern.current_time += 1
 
         if not self.vehicles:
             return
 
-        # Ordenar vehículos por posición (más alejados primero para evitar conflictos)
         self.vehicles.sort(key=lambda v: v.position, reverse=True)
 
         # Procesar cada vehículo individualmente
@@ -108,8 +102,6 @@ class Lane:
     def _update_single_vehicle(
         self, vehicle, index, light_green, stop_line, stop_buffer
     ):
-        """Actualiza un vehículo individual con lógica de tráfico realista - NUEVA FUNCIÓN."""
-
         # 1. Determinar velocidad objetivo basada en condiciones
         target_speed = self._calculate_target_speed(
             vehicle, index, light_green, stop_line, stop_buffer
@@ -141,20 +133,17 @@ class Lane:
     def _calculate_target_speed(
         self, vehicle, index, light_green, stop_line, stop_buffer
     ):
-        """Calcula la velocidad objetivo para un vehículo considerando todas las condiciones - NUEVA FUNCIÓN."""
-
         # Velocidad base con variación individual
         base_speed = self.max_speed * random.uniform(0.9, 1.1)
         target_speed = base_speed
 
-        # Factor 1: Vehículo adelante (más importante)
+        # Factor 1: Vehículo adelante
         front_vehicle = self._find_vehicle_ahead(vehicle)
         if front_vehicle:
             gap = front_vehicle.position - vehicle.position
-            safe_gap = self.min_gap_units + self.vehicle_length
+            safe_gap = 0.8
 
-            # Distancia de seguridad más realista
-            if gap < safe_gap * 3:  # Comenzar a reducir velocidad antes
+            if gap < safe_gap * 1.5:  # Comenzar a reducir velocidad antes
                 if gap < safe_gap:
                     target_speed = 0.0  # Detener si está muy cerca
                 else:
@@ -190,7 +179,6 @@ class Lane:
         return target_speed
 
     def _find_vehicle_ahead(self, current_vehicle):
-        """Encuentra el vehículo inmediatamente adelante del vehículo actual - NUEVA FUNCIÓN."""
         closest_vehicle = None
         min_distance = float("inf")
 
@@ -210,25 +198,22 @@ class Lane:
         return closest_vehicle
 
     def spawn(self, next_vehicle_id: int) -> Optional[Vehicle]:
-        """
-        Genera nuevos vehículos con mejores condiciones de spawn - MEJORADO.
-        """
         current_rate = self._calculate_current_spawn_rate()
 
         if random.random() > current_rate:
             return None
 
-        # Verificar espacio disponible de manera más permisiva
+        # Verificar espacio disponible
         spawn_position = self.lane_length
-        min_spawn_gap = self.min_gap_units * 1.5  # Mucho más permisivo
+        min_spawn_gap = 0.5
 
         # Solo verificar vehículos muy cerca del punto de spawn
         for v in self.vehicles:
             if v.position > spawn_position - min_spawn_gap:
                 return None  # No hay espacio suficiente
 
-        # Crear vehículo con características variadas más realistas
-        speed_variation = random.uniform(0.8, 1.3)  # Mayor variación
+        # Crear vehículo
+        speed_variation = random.uniform(0.8, 1.3)
         actual_speed = self.max_speed * speed_variation
 
         vehicle = Vehicle(
@@ -260,7 +245,6 @@ class Lane:
         return sum(1 for v in self.vehicles if v.position > 0 and v.stopped)
 
     def get_traffic_info(self) -> dict:
-        """Retorna información detallada sobre el estado del tráfico - AMPLIADO."""
         current_rate = self._calculate_current_spawn_rate()
 
         # Calcular separaciones promedio entre vehículos
@@ -279,7 +263,6 @@ class Lane:
             "approaching_vehicles": self.count_approaching_within(150),
             "waiting_vehicles": self.get_waiting_vehicles(),
             "total_vehicles": len(self.vehicles),
-            # NUEVOS campos de información
             "avg_separation": avg_separation,
             "min_separation": min_separation,
             "stopped_vehicles": sum(1 for v in self.vehicles if v.stopped),
@@ -293,7 +276,6 @@ class Lane:
         }
 
     def _get_traffic_category(self, rate: float) -> str:
-        """Categoriza el nivel de tráfico actual - NUEVA FUNCIÓN."""
         if rate == 0:
             return "SIN TRÁFICO"
         elif rate < 0.02:
