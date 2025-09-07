@@ -1,3 +1,4 @@
+# semaforos/lane.py - Sistema de flujo de tráfico completamente corregido
 from dataclasses import dataclass, field
 from typing import List, Optional
 import random
@@ -29,17 +30,29 @@ class Lane:
     vehicle_length: float = 5.0
 
     def __post_init__(self):
-        # Configurar patrones diferentes para cada carril con tasas más altas
+        # CORREGIDO: Configurar patrones más realistas e independientes por carril
         if self.name == "A":
-            self.traffic_pattern.phase_offset = 0.0
-            self.traffic_pattern.base_rate = 0.08  # Tasa base más alta
-            self.traffic_pattern.peak_multiplier = 2.5  # Picos menos extremos
-            self.traffic_pattern.low_multiplier = 0.5  # Períodos bajos menos severos
+            self.traffic_pattern.phase_offset = random.uniform(
+                0, 50
+            )  # Inicio aleatorio
+            self.traffic_pattern.base_rate = random.uniform(
+                0.06, 0.10
+            )  # Tasa base aleatoria
+            self.traffic_pattern.peak_multiplier = random.uniform(2.0, 3.5)
+            self.traffic_pattern.low_multiplier = random.uniform(0.3, 0.7)
+            self.traffic_pattern.cycle_length = random.uniform(
+                250, 350
+            )  # Ciclos variables
         else:  # carril B
-            self.traffic_pattern.phase_offset = 150.0  # desfasado
-            self.traffic_pattern.base_rate = 0.07  # Ligeramente diferente
-            self.traffic_pattern.peak_multiplier = 2.8
-            self.traffic_pattern.low_multiplier = 0.4
+            self.traffic_pattern.phase_offset = random.uniform(
+                100, 200
+            )  # Diferente desfase
+            self.traffic_pattern.base_rate = random.uniform(0.05, 0.09)
+            self.traffic_pattern.peak_multiplier = random.uniform(2.2, 4.0)
+            self.traffic_pattern.low_multiplier = random.uniform(0.2, 0.6)
+            self.traffic_pattern.cycle_length = random.uniform(
+                280, 380
+            )  # Ciclo diferente
 
     def _calculate_current_spawn_rate(self) -> float:
         """Calcula la tasa de spawn actual basada en patrones de tráfico dinámicos."""
@@ -75,7 +88,7 @@ class Lane:
         self, light_green: bool, stop_line: float = 0.0, stop_buffer: float = 0.5
     ):
         """
-        Sistema de movimiento de vehículos con tráfico realista
+        Sistema de movimiento de vehículos con tráfico realista - NUEVA IMPLEMENTACIÓN.
         """
         self.traffic_pattern.current_time += 1
 
@@ -95,6 +108,7 @@ class Lane:
     def _update_single_vehicle(
         self, vehicle, index, light_green, stop_line, stop_buffer
     ):
+        """Actualiza un vehículo individual con lógica de tráfico realista - NUEVA FUNCIÓN."""
 
         # 1. Determinar velocidad objetivo basada en condiciones
         target_speed = self._calculate_target_speed(
@@ -127,6 +141,7 @@ class Lane:
     def _calculate_target_speed(
         self, vehicle, index, light_green, stop_line, stop_buffer
     ):
+        """Calcula la velocidad objetivo para un vehículo considerando todas las condiciones - NUEVA FUNCIÓN."""
 
         # Velocidad base con variación individual
         base_speed = self.max_speed * random.uniform(0.9, 1.1)
@@ -139,7 +154,7 @@ class Lane:
             safe_gap = self.min_gap_units + self.vehicle_length
 
             # Distancia de seguridad más realista
-            if gap < safe_gap * 2:  # Comenzar a reducir velocidad antes
+            if gap < safe_gap * 3:  # Comenzar a reducir velocidad antes
                 if gap < safe_gap:
                     target_speed = 0.0  # Detener si está muy cerca
                 else:
@@ -175,6 +190,7 @@ class Lane:
         return target_speed
 
     def _find_vehicle_ahead(self, current_vehicle):
+        """Encuentra el vehículo inmediatamente adelante del vehículo actual - NUEVA FUNCIÓN."""
         closest_vehicle = None
         min_distance = float("inf")
 
@@ -194,6 +210,9 @@ class Lane:
         return closest_vehicle
 
     def spawn(self, next_vehicle_id: int) -> Optional[Vehicle]:
+        """
+        Genera nuevos vehículos con mejores condiciones de spawn - MEJORADO.
+        """
         current_rate = self._calculate_current_spawn_rate()
 
         if random.random() > current_rate:
@@ -241,11 +260,49 @@ class Lane:
         return sum(1 for v in self.vehicles if v.position > 0 and v.stopped)
 
     def get_traffic_info(self) -> dict:
-        """Retorna información sobre el estado del tráfico."""
+        """Retorna información detallada sobre el estado del tráfico - AMPLIADO."""
+        current_rate = self._calculate_current_spawn_rate()
+
+        # Calcular separaciones promedio entre vehículos
+        separations = []
+        sorted_vehicles = sorted(self.vehicles, key=lambda v: v.position, reverse=True)
+        for i in range(len(sorted_vehicles) - 1):
+            sep = sorted_vehicles[i].position - sorted_vehicles[i + 1].position
+            separations.append(sep)
+
+        avg_separation = sum(separations) / len(separations) if separations else 0
+        min_separation = min(separations) if separations else 0
+
         return {
-            "current_spawn_rate": self._calculate_current_spawn_rate(),
+            "current_spawn_rate": current_rate,
             "traffic_time": self.traffic_pattern.current_time,
             "approaching_vehicles": self.count_approaching_within(150),
             "waiting_vehicles": self.get_waiting_vehicles(),
             "total_vehicles": len(self.vehicles),
+            # NUEVOS campos de información
+            "avg_separation": avg_separation,
+            "min_separation": min_separation,
+            "stopped_vehicles": sum(1 for v in self.vehicles if v.stopped),
+            "moving_vehicles": sum(1 for v in self.vehicles if not v.stopped),
+            "spawn_rate_category": self._get_traffic_category(current_rate),
+            "cycle_progress": (
+                self.traffic_pattern.current_time % self.traffic_pattern.cycle_length
+            )
+            / self.traffic_pattern.cycle_length
+            * 100,
         }
+
+    def _get_traffic_category(self, rate: float) -> str:
+        """Categoriza el nivel de tráfico actual - NUEVA FUNCIÓN."""
+        if rate == 0:
+            return "SIN TRÁFICO"
+        elif rate < 0.02:
+            return "MUY BAJO"
+        elif rate < 0.05:
+            return "BAJO"
+        elif rate < 0.10:
+            return "MODERADO"
+        elif rate < 0.15:
+            return "ALTO"
+        else:
+            return "PICO MÁXIMO"

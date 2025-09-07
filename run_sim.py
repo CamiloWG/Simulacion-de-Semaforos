@@ -16,8 +16,8 @@ def main():
         name="A",
         max_speed=1.8,  # Velocidad más realista
         lane_length=600.0,  # Carriles más largos para más vehículos
-        min_gap_units=1.0,  # Separación más permisiva entre vehículos
-        vehicle_length=1.0,  # Longitud más realista de vehículos
+        min_gap_units=1.8,  # Antes era 3.0 (reducido 40%)
+        vehicle_length=3.5,  # Longitud más realista de vehículos
     )
     # El patrón de tráfico se configura automáticamente en __post_init__
 
@@ -25,8 +25,8 @@ def main():
         name="B",
         max_speed=1.7,  # Velocidades ligeramente diferentes
         lane_length=600.0,
-        min_gap_units=1.0,
-        vehicle_length=1.0,
+        min_gap_units=1.8,  # Antes era 3.0 (reducido 40%)
+        vehicle_length=3.5,
     )
 
     intersection = Intersection(
