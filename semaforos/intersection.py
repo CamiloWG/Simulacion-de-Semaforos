@@ -1,4 +1,3 @@
-# semaforos/intersection.py - Versión completamente corregida
 from .lane import Lane
 from .light import TrafficLight
 

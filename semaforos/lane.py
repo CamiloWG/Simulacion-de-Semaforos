@@ -1,4 +1,3 @@
-# semaforos/lane.py - Sistema de flujo de tráfico completamente corregido
 from dataclasses import dataclass, field
 from typing import List, Optional
 import random
@@ -76,7 +75,7 @@ class Lane:
         self, light_green: bool, stop_line: float = 0.0, stop_buffer: float = 0.5
     ):
         """
-        Sistema de movimiento de vehículos con tráfico realista - NUEVA IMPLEMENTACIÓN.
+        Sistema de movimiento de vehículos con tráfico realista
         """
         self.traffic_pattern.current_time += 1
 
@@ -96,7 +95,6 @@ class Lane:
     def _update_single_vehicle(
         self, vehicle, index, light_green, stop_line, stop_buffer
     ):
-        """Actualiza un vehículo individual con lógica de tráfico realista - NUEVA FUNCIÓN."""
 
         # 1. Determinar velocidad objetivo basada en condiciones
         target_speed = self._calculate_target_speed(
@@ -129,7 +127,6 @@ class Lane:
     def _calculate_target_speed(
         self, vehicle, index, light_green, stop_line, stop_buffer
     ):
-        """Calcula la velocidad objetivo para un vehículo considerando todas las condiciones - NUEVA FUNCIÓN."""
 
         # Velocidad base con variación individual
         base_speed = self.max_speed * random.uniform(0.9, 1.1)
@@ -142,7 +139,7 @@ class Lane:
             safe_gap = self.min_gap_units + self.vehicle_length
 
             # Distancia de seguridad más realista
-            if gap < safe_gap * 3:  # Comenzar a reducir velocidad antes
+            if gap < safe_gap * 2:  # Comenzar a reducir velocidad antes
                 if gap < safe_gap:
                     target_speed = 0.0  # Detener si está muy cerca
                 else:
@@ -178,7 +175,6 @@ class Lane:
         return target_speed
 
     def _find_vehicle_ahead(self, current_vehicle):
-        """Encuentra el vehículo inmediatamente adelante del vehículo actual - NUEVA FUNCIÓN."""
         closest_vehicle = None
         min_distance = float("inf")
 
@@ -198,9 +194,6 @@ class Lane:
         return closest_vehicle
 
     def spawn(self, next_vehicle_id: int) -> Optional[Vehicle]:
-        """
-        Genera nuevos vehículos con mejores condiciones de spawn - MEJORADO.
-        """
         current_rate = self._calculate_current_spawn_rate()
 
         if random.random() > current_rate:

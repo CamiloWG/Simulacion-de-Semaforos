@@ -1,4 +1,3 @@
-# semaforos/simulation.py - Simulación con métricas mejoradas
 from .intersection import Intersection
 import random
 

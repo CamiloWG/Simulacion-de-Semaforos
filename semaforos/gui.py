@@ -1,9 +1,3 @@
-# semaforos/gui.py - Interfaz con visualización mejorada
-"""
-Interfaz gráfica mejorada con mejor visualización del flujo de tráfico
-y patrones dinámicos de generación de vehículos.
-"""
-
 import pygame
 import sys
 import math

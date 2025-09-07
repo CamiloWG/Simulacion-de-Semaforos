@@ -1,4 +1,3 @@
-# semaforos/light.py
 from dataclasses import dataclass
 
 
